@@ -7,7 +7,7 @@ e-govの税法条文に色をつけます
 
 [Tampermonkey](http://tampermonkey.net/)を入れたブラウザで、
 
-[colored_e-gov.js](https://github.com/m-haketa/src/colored_e-gov/)
+[colored_e-gov.js](https://m-haketa.github.io/colored_e-gov/colored_e-gov.js)
 
 をクリックしてインストール。
 
@@ -20,7 +20,7 @@ e-govの税法条文に色をつけます
 
 - [消費税法](http://elaws.e-gov.go.jp/search/elawsSearch/elaws_search/lsg0500/detail?lawId=363AC0000000108)
 - [法人税法](http://elaws.e-gov.go.jp/search/elawsSearch/elaws_search/lsg0500/detail?lawId=340AC0000000034)
-- [法人税法施行令」(http://elaws.e-gov.go.jp/search/elawsSearch/elaws_search/lsg0500/detail?lawId=340CO0000000097&openerCode=1)
+- [法人税法施行令](http://elaws.e-gov.go.jp/search/elawsSearch/elaws_search/lsg0500/detail?lawId=340CO0000000097&openerCode=1)
 
 消費税法であれば、ほとんどタイムラグなく開くことができますが、法人税法施行令を開くと、処理が終わるまで私の手元（core i5-6600）で１分弱かかりました。
 
