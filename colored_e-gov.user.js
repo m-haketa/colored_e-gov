@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            highlight_e-gov
 // @namespace       https://furyu.hatenablog.com/
-// @version         0.0.1.4
+// @version         0.0.1.5
 // @description     e-gov 法令条文の括弧書きを強調
 // @author          furyu
 // @match           *://elaws.e-gov.go.jp/search/*
@@ -17,11 +17,11 @@ Required
 
 References
 ----------
-- [m-haketa/colored_e-gov: e-govの税法条文に色をつけます](https://github.com/m-haketa/colored_e-gov)  
-    Copyright (c) 2018 m-haketa  
-    [The MIT Licence](https://github.com/m-haketa/colored_e-gov/blob/master/LICENSE)  
+- [m-haketa/colored_e-gov: e-govの税法条文に色をつけます](https://github.com/m-haketa/colored_e-gov)
+    Copyright (c) 2018 m-haketa
+    [The MIT Licence](https://github.com/m-haketa/colored_e-gov/blob/master/LICENSE)
 
-- [protonet/jquery.inview: A jQuery plugin that adds a bindable 'inview' event for detecting when an element is scrolled into view.](https://github.com/protonet/jquery.inview)  
+- [protonet/jquery.inview: A jQuery plugin that adds a bindable 'inview' event for detecting when an element is scrolled into view.](https://github.com/protonet/jquery.inview)
     [jquery.inview/LICENSE](https://github.com/protonet/jquery.inview/blob/master/LICENSE)
   - [based on the idea of Remy Sharp: Element 'in view' Event Plugin](https://remysharp.com/2009/01/26/element-in-view-event-plugin/)
       [The MIT license](https://rem.mit-license.org/)
@@ -52,6 +52,207 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+
+// https://gist.github.com/ginlime/69fb499a42e79c8cfc9c37680201d953からコピペ
+(function() {
+  // 改良版 typeOf（のさらに改良）
+  // http://qiita.com/Hiraku/items/87e5d1cdaaa475c80cc2
+  var typeOf = function(x) {
+    if (x === null) return "null";
+    if (x == null) return "undefined";
+    var type = typeof x,
+      c = x.constructor,
+      cName = c && c.name ? c.name : "";
+    if (type === "object") {
+      if (jQuery && x instanceof jQuery) {
+        return "jQuery";
+      }
+      return cName ? cName : Object.prototype.toString.call(x).slice(8, -1);
+    }
+    if (cName && type == cName.toLowerCase()) {
+      return cName;
+    }
+    return type;
+  };
+  // 汎用 compare 関数
+  compareStringLenAsc = function(a, b) {
+    return a.length - b.length;
+  };
+  compareStringLenDesc = function(a, b) {
+    return b.length - a.length;
+  };
+  // プロトタイプのメソッド拡張
+  var extendMethod = function(object, methodName, method, forceOverwrite) {
+    if (typeof object[methodName] === "undefined" || forceOverwrite) {
+      if (typeof Object.defineProperty !== "function") {
+        object[methodName] = method;
+      } else {
+        Object.defineProperty(object, methodName, {
+          configurable: false,
+          enumerable: false,
+          value: method
+        });
+      }
+    }
+  };
+
+  // String プロトタイプ拡張
+  // 全置換
+  // （文字列）.replaceAll(（置換対象）,（置換語）)
+  extendMethod(String.prototype, "replaceAll", function(org, dest) {
+    var orgRE = new RegExp(org, "g");
+    return this.replace(orgRE, dest);
+  });
+  // 全角の数値を半角に
+  // （文字列）.numZenToHan()
+  var _zenExcepts = [
+    { from: "．", to: "." },
+    { from: "－", to: "-" },
+    { from: "ー", to: "-" }
+  ];
+  extendMethod(String.prototype, "numZenToHan", function() {
+    var result = this;
+    for (var i = 0; i < 10; i++) {
+      result = result.replaceAll(
+        String.fromCharCode(65296 + i),
+        String.fromCharCode(48 + i)
+      );
+    }
+    _zenExcepts.forEach(function(value, index) {
+      result = result.replaceAll(value.from, value.to);
+    });
+    return result;
+  });
+  // 漢数字の置換テーブル
+  var kansujiTransTable = {
+      零: "〇",
+      壱: "一",
+      壹: "一",
+      弌: "一",
+      弐: "二",
+      貳: "二",
+      参: "三",
+      參: "三",
+      肆: "四",
+      伍: "五",
+      陸: "六",
+      漆: "七",
+      柒: "七",
+      質: "七",
+      捌: "八",
+      玖: "九",
+      廿: "二十",
+      卅: "三十",
+      丗: "三十",
+      卌: "四十",
+      佰: "百",
+      陌: "百",
+      仟: "千",
+      阡: "千",
+      萬: "万"
+    },
+    kansujiList = (kansujiREList = "〇一二三四五六七八九"),
+    kansujiUnits = { 十: 10, 百: 100, 千: 1000 },
+    kansujiUnitsRE = new RegExp("[十百千]|[^十百千]+", "g"),
+    kansujiMansRE = new RegExp("[万億兆]|[^万億兆]+", "g"),
+    kansujiMans = { 万: 10000, 億: 100000000, 兆: 1000000000000 };
+  Object.keys(kansujiUnits).forEach(function(value, index) {
+    kansujiREList += value;
+  });
+  Object.keys(kansujiMans).forEach(function(value, index) {
+    kansujiREList += value;
+  });
+  var kansujiRE = new RegExp("([" + kansujiREList + "\\d]+)", "g");
+  // 漢数字からアラビア数字に変換
+  // （文字列）.kansuji2arabic(split3)
+  extendMethod(String.prototype, "kansuji2arabic", function(split3) {
+    var kansujistr = this.numZenToHan();
+    var protoMap = Array.prototype.map;
+    var transValue = function(num, re, dic) {
+      var tmpre = re || kansujiUnitsRE,
+        tmpdic = dic || kansujiUnits,
+        unit = 1,
+        result = 0,
+        match = num.match(tmpre).reverse();
+
+      match.forEach(function(value, index) {
+        if (tmpdic[value]) {
+          if (unit > 1) {
+            result += unit;
+          }
+          unit = tmpdic[value];
+        } else {
+          var val = !isNaN(value) ? parseInt(value) : transValue(value);
+          result += val * unit;
+          unit = 1;
+        }
+      });
+      if (unit > 1) {
+        result += unit;
+      }
+      return result;
+    };
+    Object.keys(kansujiTransTable).forEach(function(value, index) {
+      kansujistr = kansujistr.replaceAll(value, kansujiTransTable[value]);
+    });
+    if (kansujistr && kansujiRE.test(kansujistr)) {
+      var match = kansujistr
+        .match(kansujiRE)
+        .unique()
+        .sort(compareStringLenDesc);
+      match.forEach(function(value, index) {
+        var tempValue = "" + value;
+        protoMap.call(kansujiList, function(x, ind) {
+          tempValue = tempValue.replaceAll(x, ind);
+        });
+        tempValue = transValue(tempValue, kansujiMansRE, kansujiMans);
+        if (split3) {
+          tempValue = tempValue.splitComma(3);
+        } else {
+          tempValue = "" + tempValue;
+        }
+        kansujistr = kansujistr.replaceAll(value, tempValue);
+      });
+    }
+    return kansujistr;
+  });
+  // Number プロトタイプ拡張
+  // 数値をカンマ区切り
+  // （数値）.splitComma(digit)
+  // 文字列で返るので注意
+  extendMethod(Number.prototype, "splitComma", function(digit) {
+    var tmpDigit = digit || 3,
+      digitRE = new RegExp("^([+-]?\\d+)(\\d{" + tmpDigit + "})"),
+      to = String(this),
+      tmp = "";
+    while (
+      to !=
+      (tmp = to.replace(digitRE, function() {
+        return arguments[1] + "," + arguments[2];
+      }))
+    ) {
+      to = tmp;
+    }
+    return to;
+  });
+  // Array プロトタイプ拡張
+  // 配列の重複を取り除く
+  // （Array）.unique(numStrSame)
+  extendMethod(Array.prototype, "unique", function(numStrSame) {
+    var targetArray = this,
+      storageDict = {},
+      resultArray = [];
+    targetArray.forEach(function(value) {
+      var key = numStrSame ? String(value) : typeOf(value) + ":" + value;
+      if (!storageDict.hasOwnProperty(key)) {
+        storageDict[key] = true;
+        resultArray.push(value);
+      }
+    });
+    return resultArray;
+  });
+})();
+// https://gist.github.com/ginlime/69fb499a42e79c8cfc9c37680201d953からコピペ ここまで
 
 (() => {
   "use strict";
@@ -673,6 +874,9 @@ THE SOFTWARE.
   function main() {
     var start = new Date().getTime();
     log_info("set start");
+
+    var html_temp = $("body").html();
+    $("body").html(html_temp.kansuji2arabic(true));
 
     var $viewport = $("div#right_content"),
       $root_container = $("div#right_content div.LawBody"),
