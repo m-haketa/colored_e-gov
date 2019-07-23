@@ -7,7 +7,7 @@ e-govの税法条文に色をつけます
 
 [Tampermonkey](http://tampermonkey.net/)を入れたブラウザで、
 
-[colored_e-gov.js](https://m-haketa.github.io/colored_e-gov/colored_e-gov.user.js)
+[colored_e-gov.js](https://github.com/m-haketa/colored_e-gov/raw/master/colored_e-gov.user.js)
 
 をクリックしてインストール。
 
