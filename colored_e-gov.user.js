@@ -875,8 +875,11 @@ THE SOFTWARE.
     var start = new Date().getTime();
     log_info("set start");
 
-    var html_temp = $("body").html();
-    $("body").html(html_temp.kansuji2arabic(true));
+    $("#content").html(
+      $("#content")
+        .html()
+        .kansuji2arabic(true)
+    );
 
     var $viewport = $("div#right_content"),
       $root_container = $("div#right_content div.LawBody"),
